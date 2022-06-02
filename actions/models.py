@@ -17,4 +17,8 @@ class messageInformation(models.Model):
     author = models.CharField(max_length=200)
     textMessage = models.TextField()
     timeStamp = models.CharField(max_length=200)
+    channel = models.CharField(max_length=100)
+
+    def __str__(self):
+        return (self.textMessage)
 

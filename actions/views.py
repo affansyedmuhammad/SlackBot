@@ -5,7 +5,7 @@ from django.conf import settings
 import json
 from django.http import HttpResponse, JsonResponse
 import slack
-from .models import userInformation
+from .models import userInformation, messageInformation
 
 # Create your views here.
 
@@ -43,36 +43,40 @@ def events(request):#function that recieves events from Slack API
                 
             if userInformation.objects.filter(userId = userI): #Check if the user exists in the database or not
                 passwordCheck = userInformation.objects.values_list("password").get(userId = userI)
-                if passwordCheck[0] == None:
+                if passwordCheck[0] == None: #Checks if the initial password is set by user or not
                     client.chat_postMessage(channel=channel, text="%s, Please set your password by sending me a DM :Slightly_Smiling_face:.\nNote: Use <SetPassword 'Enter your password here'> to set password" %fullN)
                     return HttpResponse(status=200)
-                else:
-                    client.chat_postMessage(channel=channel, text="%s, Hello :wave:" %fullN)
+                else: #if the password is set and then the bot is mentioned, it simply replies by hello
+                    client.chat_postMessage(channel=channel, text="%s, Hello :wave:" %fullN) 
                     return HttpResponse(status=200)
 
          
             else:#Enters the userinfo in database since it does not exists.
-                temp = userInformation(userId = userI, userName = userN, fullName = fullN, email = em)
-                temp.save()
+                saveUserDetails = userInformation(userId = userI, userName = userN, fullName = fullN, email = em)
+                saveUserDetails.save()
                 client.chat_postMessage(channel=channel, text=client.chat_postMessage(channel=channel, text="%s, Please set your password by sending me a DM :Slightly_Smiling_face:.\nNote: Use <SetPassword 'Enter your password here'> to set password" %fullN))
                 return HttpResponse(status=200)
                 
             
             
-
+        #Below code listens to message events and perform corresponding operations
         if event_msg['type'] == 'message': #Checks if any message is initiated. If so, it saves the message information in database
             user = event_msg['user']
             channel = event_msg['channel']
             text = event_msg['text']
+            timestamp = event_msg['ts']
             userData = client.users_info(user = user) #Using slack api to retrieve the user information
+            userI = str(userData['user']['id']) #unique id associated with slack user
+            fullN = str(userData['user']['real_name']) #gets the real name of the user
+            passwordCheck = userInformation.objects.values_list("password").get(userId = userI) #gets the password corresponding to user
             
-            if str(channel) == 'D03J308DT8Q':
+            #Below code stores all the messages sent by user in any channel
+            saveMessageInfo = messageInformation(author = fullN, textMessage = text, timeStamp = timestamp, channel = channel)
+            saveMessageInfo.save()
+            
+            if str(channel) == 'D03J308DT8Q': #Check if the channel is SlackBots DM channel
+                
                 if "setpassword" in text.lower(): #used to set password for users
-                    
-                    userI = str(userData['user']['id']) #unique id associated with slack user
-                    fullN = str(userData['user']['real_name']) #gets the real name of the user
-                    passwordCheck = userInformation.objects.values_list("password").get(userId = userI)
-                    
                     if passwordCheck[0] == None or passwordCheck[0] == 'None':
                         temporary = userInformation.objects.values_list().get(userId = userI)
                         temporary = userInformation.objects.get(id = temporary[0])
@@ -86,12 +90,7 @@ def events(request):#function that recieves events from Slack API
                         return HttpResponse(status=200)
                 
                 
-                if "updatepassword" in text.lower(): #used to update password for users
-                    
-                    userI = str(userData['user']['id']) #unique id associated with slack user
-                    fullN = str(userData['user']['real_name']) #gets the real name of the user
-                    passwordCheck = userInformation.objects.values_list("password").get(userId = userI)
-                    
+                if "updatepassword" in text.lower(): #used to update password for users                  
                     if passwordCheck[0] == str((text.split())[-2]):
                         temporary = userInformation.objects.values_list().get(userId = userI)
                         temporary = userInformation.objects.get(id = temporary[0])
