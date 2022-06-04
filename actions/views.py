@@ -9,6 +9,7 @@ from .models import userInformation, messageInformation
 
 # Create your views here.
 
+
 @csrf_exempt
 def events(request):#function that recieves events from Slack API
 
@@ -87,6 +88,8 @@ def events(request):#function that recieves events from Slack API
 
                     else:
                         client.chat_postMessage(channel=channel, text="Password Exist.\nNote: to update password <UpdatePassword 'Enter your Previous Password Here' 'Enter New Password Here'> to set password f")
+                        client.chat_postMessage(channel=channel, text=userI)
+                        
                         return HttpResponse(status=200)
                 
                 
@@ -107,3 +110,4 @@ def events(request):#function that recieves events from Slack API
 
     
     return HttpResponse(status=200)
+
