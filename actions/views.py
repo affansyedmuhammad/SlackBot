@@ -1,13 +1,37 @@
 from re import X
+from telnetlib import STATUS
+import requests
+import os
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 import json
 from django.http import HttpResponse, JsonResponse
 import slack
-from .models import userInformation, messageInformation
+from .models import userInformation, messageInformation, upload
+import urllib.request 
+import re
 
 # Create your views here.
+
+def download(url: str, dest_folder: str):
+    if not os.path.exists(dest_folder):
+        os.makedirs(dest_folder)  # create folder if it does not exist
+
+    filename = url.split('/')[-1].replace(" ", "_")  # be careful with file names
+    file_path = os.path.join(dest_folder, filename)
+
+    r = requests.get(url, stream=True)
+    if r.ok:
+        print("saving to", os.path.abspath(file_path))
+        with open(file_path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=1024 * 8):
+                if chunk:
+                    f.write(chunk)
+                    f.flush()
+                    os.fsync(f.fileno())
+    else:  # HTTP status code 4XX/5XX
+        print("Download failed: status code {}\n{}".format(r.status_code, r.text))
 
 @csrf_exempt
 def events(request):#function that recieves events from Slack API
@@ -47,7 +71,7 @@ def events(request):#function that recieves events from Slack API
                     passwordCheck = userInformation.objects.values_list("password").get(userId = userI)
                     #print(passwordCheck)
                     if passwordCheck[0] == None: #Checks if the initial password is set by user or not
-                        client.chat_postMessage(channel=userI, text="%s, Please set your password Here :Slightly_Smiling_face:.\nNote: Use <SetPassword 'Enter your password here'> to set password" %fullN)
+                        client.chat_postMessage(channel=userI, text="%s, Please set your password Here :Slightly_Smiling_face:.\nNote: Use <-SetPassword 'Enter your password here'> to set password" %fullN)
                         return HttpResponse(status=200)
                     else: #if the password is set and then the bot is mentioned, it simply replies by hello
                         client.chat_postMessage(channel=channel, text="%s, Hello :wave:" %fullN) 
@@ -57,7 +81,7 @@ def events(request):#function that recieves events from Slack API
                 else:#Enters the userinfo in database since it does not exists.
                     saveUserDetails = userInformation(userId = userI, userName = userN, fullName = fullN, email = em)
                     saveUserDetails.save()
-                    client.chat_postMessage(channel=channel, text=client.chat_postMessage(channel=userI, text="%s, Please set your password Here :Slightly_Smiling_face:.\nNote: Use <SetPassword 'Enter your password here'> to set password" %fullN))
+                    client.chat_postMessage(channel=channel, text=client.chat_postMessage(channel=userI, text="%s, Please set your password Here :Slightly_Smiling_face:.\nNote: Use <-SetPassword 'Enter your password here'> to set password" %fullN))
                     return HttpResponse(status=200)
                 
                 
@@ -69,9 +93,8 @@ def events(request):#function that recieves events from Slack API
             timestamp = event_msg['ts']
             userData = client.users_info(user = str(user)) #Using slack api to retrieve the user information
             userI = str(userData['user']['id']) #unique id associated with slack user
-            fullN = str(userData['user']['real_name']) #gets the real name of the user
-            
-            
+            fullN = str(userData['user']['real_name']) #gets the real name of the user           
+
             #Below code stores all the messages sent by user in any channel
             saveMessageInfo = messageInformation(author = userI, textMessage = text, timeStamp = timestamp, channel = channel)
             saveMessageInfo.save()
@@ -80,21 +103,21 @@ def events(request):#function that recieves events from Slack API
             try:
                 passwordCheck = userInformation.objects.values_list("password").get(userId = userI) #gets the password corresponding to user
                 
-                if "setpassword" in text.lower(): #used to set password for users
+                if "-setpassword" in text.lower(): #used to set password for users
                     if passwordCheck[0] == None or passwordCheck[0] == 'None':
                         temporary = userInformation.objects.values_list().get(userId = userI)
                         temporary = userInformation.objects.get(id = temporary[0])
                         temporary.password = str((text.split())[-1])
                         temporary.save()
-                        client.chat_postMessage(channel=channel, text="%s, Your Password is Saved :tada:"%fullN)
+                        client.chat_postMessage(channel=userI, text="%s, Your Password is Saved :tada:"%fullN)
                         return HttpResponse(status=200)
 
                     else:
-                        client.chat_postMessage(channel=channel, text="Password Exist.\nNote: to update password <UpdatePassword 'Enter your Previous Password Here' 'Enter New Password Here'> to set password")
+                        client.chat_postMessage(channel=userI, text="Password Exist.\nNote: to update password <-UpdatePassword 'Enter your Previous Password Here' 'Enter New Password Here'> to set password")
                         return HttpResponse(status=200)
                 
                 
-                if "updatepassword" in text.lower(): #used to update password for users                  
+                if "-updatepassword" in text.lower(): #used to update password for users                  
                     if passwordCheck[0] == str((text.split())[-2]):
                         temporary = userInformation.objects.values_list().get(userId = userI)
                         temporary = userInformation.objects.get(id = temporary[0])
@@ -108,7 +131,7 @@ def events(request):#function that recieves events from Slack API
                         return HttpResponse(status=200)
             
                 #Below code is used to retrieve a list of previous messages sent by the user calling the bot 
-                if 'getconversationhistory' in text.lower():
+                if '-getconversationhistory' in text.lower():
                     messageList = []
                     conversationList = messageInformation.objects.values_list().filter(author = userI) #gets the list of messages corresponding to user
                     for messages in conversationList:
@@ -117,8 +140,60 @@ def events(request):#function that recieves events from Slack API
                     client.chat_postMessage(channel=userI, text="Previous Messages Sent by you are: \n"+str(messageList))
                     return HttpResponse(status=200)
 
+                
+
             except:
                 pass
 
-    
+            #Below code checks whether the message includes a File or not. If it exists, it is saved in the database using uploads model
+            if 'files' in event_msg and text.lower() == "-uploadfile":
+                fileName = event_msg['files'][0]['name'] #extracts the name of file
+                fileId = event_msg['files'][0]['id'] #extracts the Id of file associated with slack
+                filePath = event_msg['files'][0]['url_private_download'] #extracts the slack url for downloading the file
+                
+                #adding a header for authorization
+                opener = urllib.request.build_opener()
+                opener.addheaders = [('Authorization', 'Bearer %s' % str(settings.BOT_USER_ACCESS_TOKEN))]
+                urllib.request.install_opener(opener)
+                
+                #checks if the media directory exists or not
+                path = settings.MEDIA_ROOT.replace('\\','/') 
+                if not os.path.exists(path):
+                    os.makedirs(path)
+
+                pathToFilesFolder = path+"/"
+                #saving the file to local storage
+                urllib.request.urlretrieve(filePath, pathToFilesFolder + str(fileName.lower()))
+
+                #adding the file data to database
+                upload.objects.create(title = fileName, fileId = fileId, file = pathToFilesFolder + str(fileName))
+                client.chat_postMessage(channel=userI, text="%s, Your file is saved in the server :tada:"%fullN)
+                return HttpResponse(status=200)
+
+            #Deletes the file from local storage(Server)
+            try:
+                if '-deletefile' in text.lower():
+                        filePath = upload.objects.values_list().filter(title = text.split()[-1].lower()) #gets the fileId from filename to be deleted
+                        print(filePath[0][3])
+                        os.remove(filePath[0][3]) #deletes the file from local storage
+                        upload.objects.filter(id=int(filePath[0][0])).delete()
+                        client.chat_postMessage(channel=userI, text="File Deleted from server.")
+                        return HttpResponse(status=200)
+            except:
+                client.chat_postMessage(channel=userI, text="File not deleted")
+
+
+            #Uploads the file from local storage to slack
+            # try:
+            #     if '-getfile' in text.lower():
+            #             file = upload.objects.values_list().filter(title = text.split()[-1]) #gets the file details
+            #             print(file[0][3])
+            #             filePath = file([0][3]) #retrives the filepath
+            #             client.files_upload(channels=userI, initial_comment="Here's the requested file :smile:", file=filePath)
+            #             return HttpResponse(status=200)
+            # except:
+            #     client.chat_postMessage(channel=userI, text="File not exists :disappointed:")
+
+            
+                
     return HttpResponse(status=200)

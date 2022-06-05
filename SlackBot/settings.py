@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 
 from pathlib import Path
 from pickle import TRUE
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,6 +29,8 @@ DEBUG = TRUE
 
 ALLOWED_HOSTS = ['*']
 
+# Used to access the media folder in which files are saved
+MEDIA_ROOT=os.path.join(BASE_DIR, "files")
 
 # Application definition
 
@@ -41,9 +44,9 @@ INSTALLED_APPS = [
     'actions',
 ]
 
-#Replace correct values of your token here
+# Values of tokens are placed here
 VERIFICATION_TOKEN = 'abfMleEEwJvbGh7wvJLsi68o'
-OAUTH_ACCESS_TOKEN = '************'
+
 BOT_USER_ACCESS_TOKEN = 'xoxb-3576619164519-3584618792710-B57ZR07xQIwe4HRKfhTVXrPv'
 CLIENT_ID = '3576619164519.3614976711504'
 CLIENT_SECRET = '89d251a30bdfb3c74a8a15b7053afaeb'

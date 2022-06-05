@@ -22,3 +22,8 @@ class messageInformation(models.Model):
     def __str__(self):
         return (self.textMessage)
 
+class upload(models.Model):
+    title = models.CharField(max_length=100)
+    fileId = models.CharField(max_length=50)
+    file = models.CharField(max_length=200)
+
