@@ -78,9 +78,6 @@ WSGI_APPLICATION = 'SlackBot.wsgi.application'
 DATABASES = {
     'default':{
     'ENGINE':'django.db.backends.postgresql_psycopg2',
-    'NAME':'SlackBot',
-    'USER':'postgres',
-    'PASSWORD':'abcd',
     'HOST':'localhost',
     'PORT':'5432'
    }
