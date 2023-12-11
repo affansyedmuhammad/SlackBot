@@ -44,13 +44,6 @@ INSTALLED_APPS = [
     'actions',
 ]
 
-# Values of tokens are placed here
-VERIFICATION_TOKEN = 'abfMleEEwJvbGh7wvJLsi68o'
-
-BOT_USER_ACCESS_TOKEN = 'xoxb-3576619164519-3584618792710-B57ZR07xQIwe4HRKfhTVXrPv'
-CLIENT_ID = '3576619164519.3614976711504'
-CLIENT_SECRET = '89d251a30bdfb3c74a8a15b7053afaeb'
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -90,7 +83,7 @@ DATABASES = {
     'ENGINE':'django.db.backends.postgresql_psycopg2',
     'NAME':'SlackBot',
     'USER':'postgres',
-    'PASSWORD':'1234',
+    'PASSWORD':'abcd',
     'HOST':'localhost',
     'PORT':'5432'
    }
